@@ -104,6 +104,20 @@ class Position:
 	def __init__(self):
 		self.pos = [0, 0]
 
+	def FromTuple(t):
+		p = Position()
+		p.pos[0] = t[0]
+		p.pos[1] = t[1]
+		return p
+
+	def __setitem__(self, index, value: float):
+		assert(index < 2)
+		self.pos[index] = value
+
+	def __getitem__(self, index) -> float:
+		assert(index < 2)
+		return self.pos[index]
+
 # Convert the position to/from a semi-colon separated string
 SQL.RegisterTypeConversion(
 		Position,
