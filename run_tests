@@ -1,0 +1,2 @@
+rm test.db
+python3 test.py
