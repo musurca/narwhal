@@ -8,7 +8,7 @@ Narwhal supports foreign key relationships between tables, including both one-to
 
 ## Overview
 
-The following simple class is a perfectly valid instruction for the Narwhal ORM to produce a corresponding table and columns:
+The following simple class is a perfectly valid instruction for the Narwhal ORM to produce a corresponding table and columns.
 
 ```python
 from narwhal.sql import SQL
@@ -26,7 +26,7 @@ sql.RegisterTables((Vessel,))
 sql.CreateTables()
 ```
 
-To add a new row to the table:
+To add a new row to the table, simply instantiate the class and call the `Serialize` method.
 
 ```python
 v = Vessel()
@@ -35,22 +35,23 @@ v.year_built = 1797
 v.Serialize()
 ```
 
-To retrieve data from the table:
+Data can be retrieved from the database by constructing a query.
 
 ```python
 from narwhal.sql import Query
 
-v = SQL.Get().SelectOne(
+vessel_list = SQL.Get().Select(
 	Vessel,
 	Query.And(
 		Query.Equals("name", "Constitution"),
 		Query.GreaterThan("year_built", 1700)
 	)
 )
-print(v.name) # Constitution
+if len(vessel_list) > 0:
+	print(v[0].name) # Constitution
 ```
 
-For a one-to-one foreign key, use the Reference type:
+To express a one-to-one foreign key relation, you can use the `Reference` type. The value of a `Reference` will be deferred, i.e. only retrieved from the database when explicitly requested.
 
 ```python
 from narwhal.db import Immutable
@@ -67,11 +68,20 @@ class Vessel(Mutable):
 	vessel_class: Reference[VesselClass]
 	...
 
+v = SQL.Get().SelectOne(
+	Vessel,
+	Query.And(
+		Query.Equals("name", "Constitution"),
+		Query.GreaterThan("year_built", 1700)
+	)
+)
+
 if v.vessel_class.masts == 3:
+	# vessel_class was fetched from the DB invisibly
 	print("It's a ship!")
 ```
 
-For a one-to-many foreign key, use the List type:
+To express a one-to-many foreign key relationship, you can use the `List` type. `List` behaves just like a Python `list`, but its underlying values are only retrieved from the database when explicitly requested.
 
 ```python
 from narwhal.relations import List
@@ -87,15 +97,17 @@ class Vessel(Mutable):
 	...
 
 for man in v.crew:
+	# crew is invisibly fetched from the DB
 	if man.age > 65:
 		print(f"{man.first_name} is too old!")
 		v.crew.remove(man)
 
-# save changes to the crew
+# Changes to crew are deferred until 
+# the parent is serialized
 v.Serialize()
 ```
 
-To register a custom data type:
+You can also register custom atomic datatypes beyond the standard Python ones. Their value should be converted into a sqlite-ready type (either a `str`, `int`, or `float`).
 
 ```python
 class Position:
