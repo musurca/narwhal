@@ -87,14 +87,17 @@ class List(Generic[T]):
 		assert(self.identifier != "")
 		assert(self.parent.dbid != -1)
 
-	def __len__(self):
+	def __check_loaded__(self):
 		if self.from_db:
 			if not self.initialized:
 				self.__load__()
-				
+
+	def __len__(self):
+		self.__check_loaded__()		
 		return len(self.items)
 
 	def __add__(self, x):
+		self.__check_loaded__()
 		t = type(x)
 		if t == list or t == tuple or get_origin(t) == List:
 			for item in x:
@@ -105,6 +108,7 @@ class List(Generic[T]):
 			self.append(x)
 	
 	def __sub__(self, x):
+		self.__check_loaded__()
 		t = type(x)
 		if t == list or t == tuple or get_origin(t) == List:
 			for item in x:
@@ -137,11 +141,13 @@ class List(Generic[T]):
 		return SQL.MakeListOrder(self.identifier)
 
 	def pop(self, index):
+		self.__check_loaded__()	
 		item = self.items[index]
 		self.remove(item)
 
 	def remove(self, item):
 		assert(type(item) == self.child_dc)
+		self.__check_loaded__()
 		id_key = self.id_key
 		order_key = self.order_key
 
@@ -165,9 +171,7 @@ class List(Generic[T]):
 		
 	def __setitem__(self, index, value):
 		assert(type(value) == self.child_dc)
-		if self.from_db:
-			if not self.initialized:
-				self.__load__()
+		self.__check_loaded__()
 
 		# Remove any old item that was stored here
 		assert(index < len(self.items))
@@ -183,18 +187,14 @@ class List(Generic[T]):
 		self.items[index] = value
 
 	def __getitem__(self, index) -> object:
-		if self.from_db:
-			if not self.initialized:
-				self.__load__()
+		self.__check_loaded__()
 		
 		assert( index < len(self.items) )
 		return self.items[index]
 
 	def append(self, item):
 		assert(type(item) == self.child_dc)
-		if self.from_db:
-			if not self.initialized:
-				self.__load__()
+		self.__check_loaded__()
 
 		assert(item not in self.items)
 		new_dict = item.__dict__
@@ -204,14 +204,13 @@ class List(Generic[T]):
 		self.items.append(item)
 
 	def __iter__(self):
+		self.__check_loaded__()
 		return self.items.__iter__()
 
 	def __set__(self, obj_list):
 		t = type(obj_list)
 		assert(t == list or t == tuple or get_origin(t) == List)
-		if self.from_db:
-			if not self.initialized:
-				self.__load__()
+		self.__check_loaded__()
 
 		id_key = self.id_key
 		order_key = self.order_key
