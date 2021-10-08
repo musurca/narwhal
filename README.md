@@ -15,11 +15,11 @@ from narwhal.sql import SQL
 from narwhal.db import Mutable
 
 class Vessel(Mutable):
-	name			: str
-	year_built		: int
-	nation			: str
-	heading			: int
-	speed  			: float
+	name: str
+	year_built: int
+	nation: str
+	heading: int
+	speed: float
 
 sql = SQL("test.db")
 sql.RegisterTables((Vessel,))
@@ -57,14 +57,14 @@ from narwhal.db import Immutable
 from narwhal.relations import Reference
 
 class VesselClass(Immutable):
-	length 			: float
-	beam   			: float
-	displacement 	: int
-	masts  			: int			
-	max_speed 		: float
+	length: float
+	beam: float
+	displacement: int
+	masts: int			
+	max_speed: float
 
 class Vessel(Mutable):
-	vessel_class	: Reference[VesselClass]
+	vessel_class: Reference[VesselClass]
 	...
 
 if v.vessel_class.masts == 3:
@@ -77,19 +77,20 @@ For a one-to-many foreign key, use the List type:
 from narwhal.relations import List
 
 class Crew(Mutable):
-	first_name	: str
-	last_name	: str
-	age			: str
-	able_seaman	: bool
+	first_name: str
+	last_name: str
+	age: str
+	able_seaman: bool
 
 class Vessel(Mutable):
-	crew		: List[Crew]
+	crew: List[Crew]
 	...
 
 for man in v.crew:
 	if man.age > 65:
 		print(f"{man.first_name} is too old!")
 		v.crew.remove(man)
+
 # save changes to the crew
 v.Serialize()
 ```
