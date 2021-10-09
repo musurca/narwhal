@@ -260,7 +260,7 @@ class SQL:
 		# tuples of ( column_name, column_type )
 		column_name = lambda c : c[0]
 		column_type = lambda c : c[1]
-		cmd = f"create table {table_name} ( dbid integer primary key, "
+		cmd = f"create table {table_name} ( dbid integer primary key autoincrement, "
 		col_range = len(sql_columns) - 1
 		for i in range( col_range ):
 			column = sql_columns[i]
@@ -302,6 +302,20 @@ class SQL:
 		"""
 		self.connection.commit()
 
+	def ColumnValuesInString(data_class:type) -> str:
+		sql_columns = data_class.__sql_columns__
+
+		column_cmd = "("
+		values_cmd = "("
+		last_column_index = len(sql_columns) - 1
+		for i in range(last_column_index):
+			column_name = sql_columns[i][0]
+			column_cmd += f"{column_name},"
+			values_cmd += "?,"
+		column_cmd += f"{sql_columns[last_column_index][0]})"
+		values_cmd += "?)"
+		return (column_cmd, values_cmd)
+
 	def Add(self, item, commit=True):
 		"""
 		Adds the item as a row to its corresponding table.
@@ -320,15 +334,9 @@ class SQL:
 			if item.dbid != -1:
 				self.Update(item, commit=commit)
 				return
-		# dbid
-		item.dbid = self.TableLength(data_class)
-
-		# cache the item
-		self.cache[data_class.__name__][item.dbid] = item
 		
 		attr_list = []
-		attr_list.append(item.dbid)
-		# all other attributes
+		# all attributes other than the dbid
 		for column in sql_columns:
 			var_name = column[0]
 			var_type = column[1]
@@ -345,11 +353,15 @@ class SQL:
 				)
 	
 		# save them to the table
-		cmd = f"insert into {table_name} values (?, "
-		for i in range ( len(sql_columns) - 1 ):
-			cmd = cmd + "?, "
-		cmd = cmd + "?)"
-		self.connection.execute(cmd, attr_list)
+		colvals = SQL.ColumnValuesInString(data_class=data_class)
+		cmd = f"insert into {table_name} {colvals[0]} values {colvals[1]}"
+		cursor = self.connection.cursor()
+		cursor.execute(cmd, attr_list)
+		# Set the item dbid
+		item.dbid = cursor.lastrowid
+		# cache the item
+		self.cache[data_class.__name__][item.dbid] = item
+		cursor.close()
 
 		# finally, add lists
 		for list in item.__get_lists__():
@@ -366,67 +378,12 @@ class SQL:
 		If commit is False, then the change will not be
 		immediately committed to the DB.
 		"""
-		if len( i_list ) == 0:
-			return
-		data_class 	= i_list[0].__class__
-		dc_name = data_class.__name__
-		table_name 	= data_class.__tablename__
-		sql_columns = data_class.__sql_columns__
-
-		item_list = []
-
 		for item in i_list:
-			if hasattr(item, "dbid"):
-				if item.dbid != -1:
-					self.Update(item, commit=commit)
-					continue
-			item_list.append(item)
+			self.Add(item, commit=False)
 
-		# create the new table entries
-		#attr_types = data_class.__annotations__
-		new_entries = []
-		for i in range( len(item_list) ):
-			item = item_list[i]
-			# dbid
-			item.dbid = i
-
-			# cache the item
-			self.cache[dc_name][item.dbid] = item
-
-			attr_list = []
-			attr_list.append(item.dbid)
-			# all other attributes
-			idict = item.__dict__
-			for column in sql_columns:
-				var_name = column[0]
-				var_type = column[1]
-				# save it if there's a value;
-				# otherwise set it to a default value
-				if var_name in idict.keys():
-					var_value = idict[ var_name ]
-					if hasattr(var_value, "__sql_adapter__"):
-						var_value = var_value.__sql_adapter__()
-					attr_list.append( var_value )
-				else:
-					attr_list.append( 
-						SQL.TYPE_DEFAULT[var_type]
-					)
-			new_entries.append( tuple(attr_list) )
-		
-		# save them to the table
-		cmd = f"insert into {table_name} values (?, "
-		for i in range ( len(sql_columns) - 1 ):
-			cmd = cmd + "?, "
-		cmd = cmd + "?)"
-		self.connection.executemany(cmd, new_entries)
-
-		# Finally, add lists for each object
-		for item in item_list:
-			for list in item.__get_lists__():
-				list.__add_to_db__()
-		
 		if commit:
 			self.connection.commit()
+
 
 	def Update(self, item, force_update=False, commit=True):
 		"""
