@@ -287,12 +287,11 @@ class SQL:
 		"""
 		Returns the number of rows in a table.
 		"""
-		# TODO: sooo sloow - any way to speed this up???
 		table_name = data_class.__tablename__
-		cmd = f"select * from {table_name}"
+		cmd = f"select count(1) from {table_name}"
 		cursor = self.connection.cursor()
 		cursor.execute(cmd)
-		size = len(cursor.fetchall())
+		size = cursor.fetchone()[0]
 		cursor.close()
 		return size
 
