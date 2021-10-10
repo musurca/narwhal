@@ -68,6 +68,12 @@ def test():
 	# Bellona (the name of the vessel on which the 121st crew member serves)
 	print(List.ReverseLookup(c, Vessel, "crew").name)
 
+	vc = VesselClass.SelectOne(
+		Query.Equals("name", "Bellona-class")
+	)
+	# test reference equality
+	assert(v.v_class == vc)
+
 	# Delete the crew member
 	c.Delete()
 
@@ -89,7 +95,7 @@ if __name__ == '__main__':
 			default 	= FloatArray(32)
 		)
 
-		sql = SQL("test.db", use_cache=True)
+		sql = SQL("test.db", use_cache=False)
 		sql.RegisterTables([
 			Crew,
 			VesselClass,

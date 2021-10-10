@@ -100,6 +100,9 @@ class DBObject:
 		if "dbid" in idict.keys():
 			sql.Delete(self, force_remove=force_remove)
 
+	def __eq__(self, obj) -> bool:
+		return (type(self) == type(obj)) and (self.dbid == obj.dbid)
+
 	@classmethod
 	def Select(cls, args:tuple, orderby="") -> list:
 		return SQL.Get().Select(cls, args, orderby)
@@ -127,6 +130,7 @@ class DBObject:
 	@classmethod
 	def __len__(cls) -> int:
 		return SQL.Get().TableLength(cls)
+
 
 
 class Mutable(DBObject):
