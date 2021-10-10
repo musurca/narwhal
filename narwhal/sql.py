@@ -168,6 +168,8 @@ class SQL:
 		if list_order_column not in sql_columns:
 			sql_columns.append(list_order_column)
 
+		parent_class.__list_defs__.append((varname, child_class.__name__))
+
 	def Get():
 		return SQL.DEFAULT_DB
 
@@ -220,13 +222,10 @@ class SQL:
 
 	def CacheSize(self):
 		"""
-		Returns the size of the cache.
+		Returns the size of the cache, which is just
+		the size of the shared memory.
 		"""
-		sz = 0
-		for key, item in self.cache.items():
-			sz += sys.getsizeof(key)
-			sz += sys.getsizeof(item)
-		return sz
+		return self.SharedMemorySize()
 
 	def SharedMemorySize(self):
 		"""
@@ -249,6 +248,7 @@ class SQL:
 		Lists may add entries to those columns to add 
 		1:M relations.
 		"""
+		data_class.__list_defs__ = []
 		sql_columns = []
 		annotations = data_class.__annotations__
 		for var_name, var_type in annotations.items():
@@ -439,6 +439,7 @@ class SQL:
 		cursor.execute(cmd, attr_list)
 		# Set the item dbid
 		item.dbid = cursor.lastrowid
+
 		# add the item to shared memory
 		if self.use_sharedmemory:
 			self.sharedmemory[data_class.__name__][item.dbid] = item
@@ -475,10 +476,45 @@ class SQL:
 		table_name = data_class.__tablename__
 		cmd = f"delete from {table_name} where dbid = ?"
 		self.connection.execute( cmd, (item.dbid,) )
-		# TODO: handle shared memory cache, references, lists, etc.
+		
+		if self.use_cache:
+			# clear cached results if they include this item
+			to_remove = []
+			for h, val in self.cache.items():
+				if type(val) == list:
+					if item in val:
+						to_remove.append(h)
+				else:
+					if item == val:
+						to_remove.append(h)
+			for h in to_remove:
+				self.cache.pop(h)
+
 		if self.use_sharedmemory:
+			# remove it from shared memory
 			if item.dbid in self.sharedmemory[dc_name].keys():
 				self.sharedmemory[dc_name].pop(item.dbid)
+			
+			# remove it from any References in shared memory
+			for dc in self.tables:
+				for fk in dc.__foreign_keys__:
+					if fk[1] == dc_name:
+						for v in self.sharedmemory[dc.__name__].values():
+							ref = v.__get_reference__(fk[0])
+							if ref.ref_id == item.dbid:
+								ref.__set__(None)
+
+			# remove it from any Lists in shared memory 
+			for name, vals in self.sharedmemory.items():
+				if name == dc_name:
+					continue
+				for ld in dc.__list_defs__:
+					if ld[1] == dc_name:
+						for val in vals.values():
+							my_list = val.__dict__[ ld[0] ]
+							if item in my_list:
+								my_list.remove(item)
+		
 		if commit:
 			self.connection.commit()
 

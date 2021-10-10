@@ -194,6 +194,11 @@ class List(Generic[T]):
 		new_dict[self.order_key] = index
 		self.items[index] = value
 
+	def __contains__(self, value:object) -> bool:
+		assert(type(value) == self.child_dc)
+		self.__check_loaded__()
+		return value in self.items
+
 	def __getitem__(self, index) -> object:
 		self.__check_loaded__()
 		

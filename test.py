@@ -69,6 +69,12 @@ def test():
 	# Bellona (the name of the vessel on which the 121st crew member serves)
 	print(List[Crew].ReverseLookup(v.crew[120], Vessel, "crew").name)
 
+	# Delete the crew member
+	c.Delete()
+
+	# Delete the vessel
+	v.Delete()
+
 if __name__ == '__main__':
 		SQL.RegisterTypeConversion(
 			Position,
