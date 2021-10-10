@@ -100,6 +100,34 @@ class DBObject:
 		if "dbid" in idict.keys():
 			sql.Delete(self, force_remove=force_remove)
 
+	@classmethod
+	def Select(cls, args:tuple, orderby="") -> list:
+		return SQL.Get().Select(cls, args, orderby)
+
+	@classmethod
+	def SelectOne(cls, args:tuple) -> object:
+		return SQL.Get().SelectOne(cls, args)
+
+	@classmethod
+	def SelectAll(cls) -> list:
+		return SQL.Get().SelectAll(cls)
+
+	@classmethod
+	def SelectAtIndex(cls, index:int) -> object:
+		return SQL.Get().SelectAtIndex(cls, index)
+
+	@classmethod
+	def SelectRandom(cls, num=1):
+		return SQL.Get().SelectRandom(cls, num)
+
+	@classmethod
+	def Count(cls, args:tuple) -> int:
+		return SQL.Get().Count(cls, args)
+
+	@classmethod
+	def __len__(cls) -> int:
+		return SQL.Get().TableLength(cls)
+
 
 class Mutable(DBObject):
 	__immutable__ = False

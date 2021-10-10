@@ -33,6 +33,14 @@ v = Vessel()
 v.name = "Constitution"
 v.year_built = 1797
 v.Serialize()
+
+# Or, to efficently add a large list of rows:
+v_list = []
+for i in range( 1000 ):
+	v = Vessel()
+	v_list.append(v)
+
+SQL.Get().AddList(v_list)
 ```
 
 To remove an item from the table,  use the `Delete` method.
@@ -46,8 +54,7 @@ Data can be retrieved from the database by constructing a query.
 ```python
 from narwhal.sql import Query
 
-vessel_list = SQL.Get().Select(
-	Vessel,
+vessel_list = Vessel.Select(
 	Query.And(
 		Query.Equals("name", "Constitution"),
 		Query.GreaterThan("year_built", 1700)
@@ -92,8 +99,7 @@ class Vessel(Mutable):
 	vessel_class: Reference[VesselClass]
 	...
 
-v = SQL.Get().SelectOne(
-	Vessel,
+v = Vessel.SelectOne(
 	Query.And(
 		Query.Equals("name", "Constitution"),
 		Query.GreaterThan("year_built", 1700)

@@ -36,25 +36,23 @@ def test():
 		clist.remove(c)
 	v.Serialize()
 
-	c = sql.SelectOne(
-		Crew,
+	c = Crew.SelectOne(
 		Query.Equals("name", "dfasodasd")
 	)
+
 	# Change the crew member's name,
 	# and save him to the db
 	c.name = "update_successful"
 	c.Serialize()
 
-	c = sql.SelectOne(
-		Crew,
+	c = Crew.SelectOne(
 		Query.And(
 			Query.LessThanEquals("health", 0),
 			Query.Equals("courage", 232)
 		)
 	)
 
-	v = sql.SelectOne(
-		Vessel,
+	v = Vessel.SelectOne(
 		Query.Equals("name", "Bellona")
 	)
 
@@ -63,11 +61,12 @@ def test():
 	# Bellona
 	print(v.name)
 	# the 121st crewmember's name
-	print(v.crew[120].name)
+	c = v.crew[120]
+	print(c.name)
 	# Bellona-class (the vessel's class)
 	print(v.v_class.name)
 	# Bellona (the name of the vessel on which the 121st crew member serves)
-	print(List[Crew].ReverseLookup(v.crew[120], Vessel, "crew").name)
+	print(List.ReverseLookup(c, Vessel, "crew").name)
 
 	# Delete the crew member
 	c.Delete()

@@ -62,7 +62,8 @@ class List(Generic[T]):
 	from_db			: bool
 
 	# For looking up the parent from the child
-	def ReverseLookup(child:object, parent_dc:type, var_name:str):
+	@classmethod
+	def ReverseLookup(cls, child:object, parent_dc:type, var_name:str):
 		id = SQL.MakeListID( SQL.ListIdentifier(parent_dc, var_name) )
 		parent_dbid = child.__dict__[id]
 		if parent_dbid != -1:

@@ -881,7 +881,7 @@ class SQL:
 
 		return item
 	
-	def RandomEntries(self, data_class:type, num=1) -> list:
+	def SelectRandom(self, data_class:type, num=1) -> list:
 		"""
 		Selects rows at random from the DB. Result not cached.
 
