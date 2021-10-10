@@ -88,6 +88,11 @@ class List(Generic[T]):
 		assert(self.identifier != "")
 		assert(self.parent.dbid != -1)
 
+	def __is_loaded__(self):
+		if self.from_db:
+			return self.initialized
+		return True
+
 	def __check_loaded__(self):
 		if self.from_db:
 			if not self.initialized:
