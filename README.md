@@ -35,6 +35,12 @@ v.year_built = 1797
 v.Serialize()
 ```
 
+To remove an item from the table,  use the `Delete` method.
+
+```python
+v.Delete()
+```
+
 Data can be retrieved from the database by constructing a query.
 
 ```python
@@ -51,11 +57,10 @@ if len(vessel_list) > 0:
 	print(v[0].name) # Constitution
 ```
 
-To express a one-to-one foreign key relation, you can use the `Reference` type. The value of a `Reference` will be deferred, i.e. only retrieved from the database when explicitly requested.
+Tables can either be `Mutable` or `Immutable`. Rows in `Immutable` tables are "write-protected" and cannot be updated after being added without an explicit instruction.
 
 ```python
 from narwhal.db import Immutable
-from narwhal.relations import Reference
 
 class VesselClass(Immutable):
 	length: float
@@ -63,6 +68,25 @@ class VesselClass(Immutable):
 	displacement: int
 	masts: int			
 	max_speed: float
+
+# This will successfully add a new VesselClass
+v = VesselClass()
+v.masts = 3
+v.Serialize()
+
+# This will fail, as VesselClass is immutable
+v.masts = 2
+v.Serialize()
+
+# This will ignore VesselClass's immutability
+# and successfully update it
+v.Serialize(force_update=True)
+```
+
+To express a one-to-one foreign key relation, you can use the `Reference` type. The value of a `Reference` will be deferred, i.e. only retrieved from the database when explicitly requested.
+
+```python
+from narwhal.relations import Reference
 
 class Vessel(Mutable):
 	vessel_class: Reference[VesselClass]
@@ -77,7 +101,8 @@ v = SQL.Get().SelectOne(
 )
 
 if v.vessel_class.masts == 3:
-	# vessel_class was fetched from the DB invisibly
+	# The value of vessel_class is fetched from the DB 
+	# invisibly
 	print("It's a ship!")
 ```
 
