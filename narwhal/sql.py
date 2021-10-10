@@ -220,6 +220,19 @@ class SQL:
 				print(f"WARNING: {var_name} in {data_class.__name__} not a recognized datatype!")
 		return sql_columns
 
+	def ColumnValuesInString(data_class:type) -> str:
+		sql_columns = data_class.__sql_columns__
+
+		column_cmd = "("
+		values_cmd = "("
+		last_column_index = len(sql_columns) - 1
+		for i in range(last_column_index):
+			column_name = sql_columns[i][0]
+			column_cmd += f"{column_name},"
+			values_cmd += "?,"
+		column_cmd += f"{sql_columns[last_column_index][0]})"
+		values_cmd += "?)"
+		return (column_cmd, values_cmd)
 
 	def RegisterTables(self, data_classes:list):
 		"""
@@ -241,6 +254,24 @@ class SQL:
 			# initialize table name
 			if "__tablename__" not in data_class.__dict__.keys():
 				data_class.__tablename__ = f"{dc_name.lower()}_table"
+			
+			# find foreign key relationships, if any
+			foreign_keys = []
+			for item_name, item_type in data_class.__annotations__.items():
+				origin = get_origin(item_type)
+				if hasattr(origin, "__name__"):
+					if origin.__name__ == "Reference":
+						child_dc = get_args(item_type)[0]
+						foreign_keys.append(
+							(item_name, child_dc.__tablename__)
+						)
+			data_class.__foreign_keys__ = foreign_keys
+		
+		# now that columns are finalized, cache column name + args
+		for data_class in data_classes:
+			data_class.__column_values__ = SQL.ColumnValuesInString(
+				data_class=data_class
+			)
 			
 	# TODO: don't create the tables if not needed
 	def CreateTables(self):
@@ -266,7 +297,13 @@ class SQL:
 			column = sql_columns[i]
 			cmd = cmd + f"{column_name(column)} {column_type(column)}, "
 		column = sql_columns[col_range]
-		cmd = cmd + f"{column_name(column)} {column_type(column)})"
+		cmd = cmd + f"{column_name(column)} {column_type(column)}"
+
+		# establish foreign keys
+		foreign_keys = data_class.__foreign_keys__
+		for foreign_key in foreign_keys:
+			cmd += f", foreign key({foreign_key[0]}) references {foreign_key[1]}(dbid)"
+		cmd += ")"
 
 		# execute it
 		self.connection.execute(cmd)
@@ -301,20 +338,6 @@ class SQL:
 		deferred other changes.
 		"""
 		self.connection.commit()
-
-	def ColumnValuesInString(data_class:type) -> str:
-		sql_columns = data_class.__sql_columns__
-
-		column_cmd = "("
-		values_cmd = "("
-		last_column_index = len(sql_columns) - 1
-		for i in range(last_column_index):
-			column_name = sql_columns[i][0]
-			column_cmd += f"{column_name},"
-			values_cmd += "?,"
-		column_cmd += f"{sql_columns[last_column_index][0]})"
-		values_cmd += "?)"
-		return (column_cmd, values_cmd)
 
 	def Add(self, item, commit=True):
 		"""
@@ -353,7 +376,7 @@ class SQL:
 				)
 	
 		# save them to the table
-		colvals = SQL.ColumnValuesInString(data_class=data_class)
+		colvals = data_class.__column_values__
 		cmd = f"insert into {table_name} {colvals[0]} values {colvals[1]}"
 		cursor = self.connection.cursor()
 		cursor.execute(cmd, attr_list)
@@ -384,6 +407,17 @@ class SQL:
 		if commit:
 			self.connection.commit()
 
+	def Delete(self, item, force_remove=False, commit=True):
+		data_class = item.__class__
+		if data_class.__immutable__ and not force_remove:
+			print(f"WARNING: Can't delete immutable type {data_class.__name__}!")
+			return
+		table_name = data_class.__tablename__
+		cmd = f"delete from {table_name} where dbid = ?"
+		self.connection.execute( cmd, (item.dbid,) )
+		# TODO: handle shared memory cache, references, lists, etc.
+		if commit:
+			self.connection.commit()
 
 	def Update(self, item, force_update=False, commit=True):
 		"""
@@ -403,7 +437,6 @@ class SQL:
 			# construct the sql update command
 			dbid = item.dbid
 
-			# TODO: maybe handle caching here instead of in reference
 			if data_class.__immutable__ and not force_update:
 				print(f"WARNING: Can't update immutable type {data_class.__name__}!")
 				return
@@ -623,7 +656,41 @@ class SQL:
 			search_list.append(item)
 		cursor.close()
 		return search_list
+
+	def Count(self, data_class:type, args:tuple) -> int:
+		"""
+		Returns the number of rows in the table that satisfy the query.
+
+		Arguments:
+
+		args 	-- Produced by chaining Query functions.
+		"""
+		table_name = data_class.__tablename__
+		cmd = f"select count(1) from {table_name} where {args[0]}"
+		cursor = self.connection.cursor()
+		cursor.execute(cmd, args[1])
+		size = cursor.fetchone()[0]
+		cursor.close()
+		return size
 	
+	def SelectAll(self, data_class:type) -> list:
+		"""
+		Returns all rows of a table from the DB.
+
+		Arguments:
+
+		args 	-- Produced by chaining Query functions.
+		"""
+		table_name = data_class.__tablename__
+		cmd = "select * from {table_name}"
+		cursor = self.connection.cursor()
+		results = cursor.fetchall()
+		search_list = []
+		for result in results:
+			item = self.ProcessRow(data_class, result)
+			search_list.append(item)
+		cursor.close()
+
 	def SelectOne(self, data_class:type, args:tuple) -> list:
 		"""
 		Selects a single row from the DB, and returns an object.

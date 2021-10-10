@@ -93,6 +93,12 @@ class DBObject:
 			sql.Update(self, force_update)
 		else:
 			sql.Add(self)
+	
+	def Delete(self, force_remove=False):
+		sql = SQL.Get()
+		idict = object.__getattribute__(self, "__dict__")
+		if "dbid" in idict.keys():
+			sql.Delete(self, force_remove=force_remove)
 
 
 class Mutable(DBObject):

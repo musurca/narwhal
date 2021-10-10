@@ -32,10 +32,11 @@ class Reference(Generic[T]):
 		self.initialized = False
 
 	def __set__(self, obj):
-		assert(type(obj) == self.child_dc)
-		if not self.initialized:
-			self.__get__()
-		self.ref_id = obj.dbid
+		if obj != None:
+			assert(type(obj) == self.child_dc)
+			self.ref_id = obj.dbid
+		else:
+			self.ref_id = -1
 		self.cached = obj
 
 	def __get__(self):
@@ -90,10 +91,17 @@ class List(Generic[T]):
 	def __check_loaded__(self):
 		if self.from_db:
 			if not self.initialized:
-				self.__load__()
+				self.__validate_parent__()
+				#dc = get_args(self.__orig_class__)[0]
+				self.items = SQL.Get().Select(
+					self.child_dc,
+					Query.Equals(self.id_key, self.parent.dbid),
+					Query.OrderAscending(self.order_key)
+				)
+				self.initialized = True
 
 	def __len__(self):
-		self.__check_loaded__()		
+		self.__check_loaded__()	
 		return len(self.items)
 
 	def __add__(self, x):
@@ -230,17 +238,6 @@ class List(Generic[T]):
 		assert(len(self.items) == 0)
 		for obj in obj_list:
 			self.append(obj)
-	
-	def __load__(self):
-		if self.from_db:
-			self.__validate_parent__()
-			#dc = get_args(self.__orig_class__)[0]
-			self.items = SQL.Get().Select(
-				self.child_dc,
-				Query.Equals(self.id_key, self.parent.dbid),
-				Query.OrderAscending(self.order_key)
-			)
-			self.initialized = True
 
 	# NOTE: Oddly, updating with sql.UpdateList (executemany) 
 	# is slower than updating with sql.Update (execute).
