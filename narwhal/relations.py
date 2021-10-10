@@ -158,6 +158,35 @@ class List(Generic[T]):
 		item = self.items[index]
 		self.remove(item)
 
+	def __erase__(self, item):
+		"""
+		Remove an item from a List when it's already been deleted. 
+		Ensures that the item is not added to the DB again.
+		"""
+		assert(type(item) == self.child_dc)
+		if self.__is_loaded__():
+			if item in self.items:
+				id_key = self.id_key
+				order_key = self.order_key
+
+				# Knock the item off the list
+				prev_dict = item.__dict__
+				prev_dict[id_key] = -1
+				cur_order = prev_dict[order_key]
+				prev_dict[order_key] = -1
+
+				# Move all items above it down one
+				last_index = len(self.items) - 1
+				for i in range( cur_order, last_index ):
+					move_item = self.items[i+1]
+					move_item[order_key] = i
+					self.items[i] = move_item
+				self.items.pop(last_index)
+
+				# remove it from former items to update
+				if item in self.former_items:
+					self.former_items.pop(item)
+
 	def remove(self, item):
 		assert(type(item) == self.child_dc)
 		self.__check_loaded__()

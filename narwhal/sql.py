@@ -514,10 +514,7 @@ class SQL:
 					if ld[1] == dc_name:
 						for val in vals.values():
 							my_list = val.__dict__[ ld[0] ]
-							# Only check lists that are initialized
-							if my_list.__is_loaded__():
-								if item in my_list:
-									my_list.remove(item)
+							my_list.__erase__(item)
 		
 		if commit:
 			self.connection.commit()
