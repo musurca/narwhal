@@ -5,7 +5,7 @@ from narwhal.relations import List
 
 from test import *
 
-if __name__ == '__main__':
+def test():
 	SQL.RegisterTypeConversion(
 		Position,
 		adapter 	= Position.SQLAdapter,
@@ -20,14 +20,7 @@ if __name__ == '__main__':
 		default 	= FloatArray(32)
 	)
 
-	sql = SQL("test.db")
-	sql.RegisterTables([
-		Crew,
-		VesselClass,
-		Vessel,
-		HistoryString
-	])
-	sql.CreateTables()
+	sql = SQL.Get()
 
 	clist = []
 	for i in range(1000):
@@ -51,7 +44,6 @@ if __name__ == '__main__':
 	v = Vessel()
 	v.name = "Bellona"
 	v.v_class = vc
-	crewlist = []
 	for i in range(300):
 		c = choice(clist)
 		v.crew.append(c)
@@ -62,11 +54,10 @@ if __name__ == '__main__':
 		Crew,
 		Query.Equals("name", "dfasodasd")
 	)
-	if c != None:
-		# Change the crew member's name,
-		# and save him to the db
-		c.name = "update_successful"
-		c.Serialize()
+	# Change the crew member's name,
+	# and save him to the db
+	c.name = "update_successful"
+	c.Serialize()
 
 	c = sql.SelectOne(
 		Crew,
@@ -81,16 +72,28 @@ if __name__ == '__main__':
 		Query.Equals("name", "Bellona")
 	)
 
-	if c != None:
-		# "update_successful"
-		print(c.name)
-		# Bellona
-		print(v.name)
-		# the 121st crewmember's name
-		print(v.crew[120].name)
-		# Bellona-class (the vessel's class)
-		print(v.v_class.name)
-		# Bellona (the name of the vessel on which the 121st crew member serves)
-		print(List[Crew].ReverseLookup(v.crew[120], Vessel, "crew").name)
+	# "update_successful"
+	print(c.name)
+	# Bellona
+	print(v.name)
+	# the 121st crewmember's name
+	print(v.crew[120].name)
+	# Bellona-class (the vessel's class)
+	print(v.v_class.name)
+	# Bellona (the name of the vessel on which the 121st crew member serves)
+	print(List[Crew].ReverseLookup(v.crew[120], Vessel, "crew").name)
+
+if __name__ == '__main__':
+		sql = SQL("test.db")
+		sql.RegisterTables([
+			Crew,
+			VesselClass,
+			Vessel,
+			HistoryString
+		])
+		sql.CreateTables()
+
+		test()
+
 		# size of data stored in memory from the db
 		print(f"Size of DB data stored in memory: {sql.CacheSize()} bytes")
