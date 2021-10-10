@@ -478,12 +478,14 @@ class SQL:
 		self.connection.execute( cmd, (item.dbid,) )
 		
 		if self.use_cache:
-			# clear cached results if they include this item
+			# clear the item from any appearance in the cache
 			to_remove = []
 			for h, val in self.cache.items():
 				if type(val) == list:
 					if item in val:
-						to_remove.append(h)
+						val.remove(item)
+						if len(val) == 0:
+							to_remove.append(h)
 				else:
 					if item == val:
 						to_remove.append(h)
