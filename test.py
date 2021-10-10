@@ -6,20 +6,6 @@ from narwhal.relations import List
 from test import *
 
 def test():
-	SQL.RegisterTypeConversion(
-		Position,
-		adapter 	= Position.SQLAdapter,
-		converter 	= Position.SQLConverter,
-		default 	= Position()
-	)
-
-	SQL.RegisterTypeConversion(
-		FloatArray,
-		adapter 	= FloatArray.SQLAdapter,
-		converter 	= FloatArray.SQLConverter,
-		default 	= FloatArray(32)
-	)
-
 	sql = SQL.Get()
 
 	clist = []
@@ -84,7 +70,21 @@ def test():
 	print(List[Crew].ReverseLookup(v.crew[120], Vessel, "crew").name)
 
 if __name__ == '__main__':
-		sql = SQL("test.db")
+		SQL.RegisterTypeConversion(
+			Position,
+			adapter 	= Position.SQLAdapter,
+			converter 	= Position.SQLConverter,
+			default 	= Position()
+		)
+
+		SQL.RegisterTypeConversion(
+			FloatArray,
+			adapter 	= FloatArray.SQLAdapter,
+			converter 	= FloatArray.SQLConverter,
+			default 	= FloatArray(32)
+		)
+
+		sql = SQL("test.db", use_cache=True)
 		sql.RegisterTables([
 			Crew,
 			VesselClass,
@@ -96,4 +96,4 @@ if __name__ == '__main__':
 		test()
 
 		# size of data stored in memory from the db
-		print(f"Size of DB data stored in memory: {sql.CacheSize()} bytes")
+		print(f"Size of DB data stored in memory: {sql.SharedMemorySize()} bytes")

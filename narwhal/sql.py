@@ -90,7 +90,10 @@ class SQL:
 	DEFAULT_DB = None
 	TABLES = []
 
-	cache : dict
+	use_cache: bool
+	cache: dict
+	use_sharedmemory: bool
+	sharedmemory: dict
 
 	TYPE_TABLE = {
 		"str" 				: "text",
@@ -109,6 +112,8 @@ class SQL:
 		"timestamp"	: datetime(1000, 1, 1)
 	}
 
+	TYPE_ADAPTERS = {}
+
 	def RegisterTypeConversion(data_class:type, adapter, converter, default):
 		"""
 		Register your custom data type for storage in the DB.
@@ -124,6 +129,7 @@ class SQL:
 		SQL.TYPE_TABLE[type_name] = sql_type
 		SQL.TYPE_DEFAULT[sql_type] = default
 		sqlite3.register_adapter(data_class, adapter)
+		SQL.TYPE_ADAPTERS[type_name] = adapter
 		sqlite3.register_converter(sql_type, converter)
 
 	def ListIdentifier(parent_dc:type, varname:str):
@@ -165,21 +171,69 @@ class SQL:
 	def Get():
 		return SQL.DEFAULT_DB
 
-	def __init__(self, db_path:str):
+	def __init__(self, db_path:str, use_cache=False, use_sharedmemory=False):
 		self.connection = sqlite3.connect(
 			db_path,
 			detect_types=sqlite3.PARSE_DECLTYPES
 		)
 		self.connection.row_factory = sqlite3.Row
+		self.use_cache = use_cache
 		self.cache = {}
+		self.use_sharedmemory = use_sharedmemory or use_cache
+		self.sharedmemory = {}
 		SQL.DEFAULT_DB = self
+
+	def CommandHash(cmd:str, args:tuple) -> int:
+		"""
+		Calculates a integer hash for the SQL command after 
+		substituting arguments into '?'. The hash is order-
+		independent, meaning that any collection of identical
+		characters will return the same hash, regardless of the
+		order in which they're arranged.
+		"""
+		cmd_list = cmd.split("?")
+		cmd_str = ""
+		# substitute arguments into list
+		for i in range( len(cmd_list) ):
+			cmd_str += cmd_list[i]
+			if i < len(args):
+				arg = args[i]
+				arg_typename = type(arg).__name__
+				if arg_typename in SQL.TYPE_ADAPTERS:
+					arg = SQL.TYPE_ADAPTERS[arg_typename](arg)
+				elif hasattr(arg, "__sql_adapter__"):
+					arg = arg.__sql_adapter__()
+				cmd_str += str(arg)
+
+		hash = 0
+		for i in range( len(cmd_str) ):
+			k = ord(cmd_str[i])
+			k = k ^ (k >> 17)
+			k *= 830770091
+			k = k ^ (k >> 11)
+			k *= -1404298415
+			k = k ^ (k >> 15)
+			k *= 830770091
+			k = k ^ (k >> 14)
+			hash += k
+		return hash
 
 	def CacheSize(self):
 		"""
-		Return the size of the DB cache in memory.
+		Returns the size of the cache.
 		"""
 		sz = 0
 		for key, item in self.cache.items():
+			sz += sys.getsizeof(key)
+			sz += sys.getsizeof(item)
+		return sz
+
+	def SharedMemorySize(self):
+		"""
+		Returns the size of shared memory.
+		"""
+		sz = 0
+		for key, item in self.sharedmemory.items():
 			sz += sys.getsizeof(key)
 			for k, i in item.items():
 				sz += sys.getsizeof(k)
@@ -243,8 +297,9 @@ class SQL:
 		for data_class in data_classes:
 			dc_name = data_class.__name__
 
-			# initialize cache
-			self.cache[dc_name] = {}
+			# initialize shared memory
+			if self.use_sharedmemory:
+				self.sharedmemory[dc_name] = {}
 
 			# initialize column names
 			if not hasattr(data_class, "__sql_columns__"):
@@ -317,8 +372,10 @@ class SQL:
 		# clear table first
 		self.connection.execute(f"delete from {table_name}")
 		self.connection.commit()
-		# Clear our cache
-		self.cache[data_class.__name__] = {}
+		
+		# Clear our shared memory
+		if self.use_sharedmemory:
+			self.sharedmemory[data_class.__name__] = {}
 
 	def TableLength(self, data_class:type) -> int:
 		"""
@@ -382,8 +439,10 @@ class SQL:
 		cursor.execute(cmd, attr_list)
 		# Set the item dbid
 		item.dbid = cursor.lastrowid
-		# cache the item
-		self.cache[data_class.__name__][item.dbid] = item
+		# add the item to shared memory
+		if self.use_sharedmemory:
+			self.sharedmemory[data_class.__name__][item.dbid] = item
+
 		cursor.close()
 
 		# finally, add lists
@@ -409,13 +468,17 @@ class SQL:
 
 	def Delete(self, item, force_remove=False, commit=True):
 		data_class = item.__class__
+		dc_name = data_class.__name__
 		if data_class.__immutable__ and not force_remove:
-			print(f"WARNING: Can't delete immutable type {data_class.__name__}!")
+			print(f"WARNING: Can't delete immutable type {dc_name}!")
 			return
 		table_name = data_class.__tablename__
 		cmd = f"delete from {table_name} where dbid = ?"
 		self.connection.execute( cmd, (item.dbid,) )
 		# TODO: handle shared memory cache, references, lists, etc.
+		if self.use_sharedmemory:
+			if item.dbid in self.sharedmemory[dc_name].keys():
+				self.sharedmemory[dc_name].pop(item.dbid)
 		if commit:
 			self.connection.commit()
 
@@ -606,37 +669,37 @@ class SQL:
 
 	def ProcessRow(self, data_class:str, row:sqlite3.Row):
 		"""
-		Process an individual Row returned from the DB. To ensure that
-		there are no duplicate copies of objects in memory, this method 
-		checks the cache to see if memory has already been allocated,
-		or adds a new block of allocated memory to the cache otherwise.
+		Process an individual Row returned from the DB.
 		"""
 		dbid = row["dbid"]
 		dc_name = data_class.__name__
 		item = None
-		# If the item is in the cache, we copy the result
+		# If the item is in shared memory, we copy the result
 		# into the same block of memory. Otherwise, we
-		# make a new item, cache it, then return
-		if dbid in self.cache[dc_name].keys():
-			# in cache
-			item = self.cache[dc_name][dbid]
-			SQL.CopyRowToData(data_class, row, item)
+		# make a new item, add it, then return
+		if self.use_sharedmemory:
+			if dbid in self.sharedmemory[dc_name].keys():
+				# in shared memory
+				item = self.sharedmemory[dc_name][dbid]
+				SQL.CopyRowToData(data_class, row, item)
+			else:
+				# not in shared memory already
+				item = SQL.CopyRowToData(data_class, row)
+				self.sharedmemory[dc_name][dbid] = item
 		else:
-			# not in cache already
 			item = SQL.CopyRowToData(data_class, row)
-			self.cache[dc_name][dbid] = item
 		return item
 
-	def ExecuteSelect(cursor, table_name:str, args:tuple, orderby:str):
+	def MakeSelectCommand(table_name:str, args:tuple, orderby="") -> str:
 		"""
-		Execute a SELECT command with WHERE query arguments, and 
+		Creates a SELECT command with WHERE query arguments, and 
 		optional ORDER BY.
 		"""
-		cmd = f"select * from {table_name} where {args[0]}"
+		cmd = f"select * from {table_name} where {args}"
 		if orderby != "":
 			cmd = cmd + f" order by {orderby}"
-		cursor.execute(cmd, args[1])
-		
+		return cmd
+
 	def Select(self, data_class:type, args:tuple, orderby="") -> list:
 		"""
 		Selects data from the DB, and returns a list of objects.
@@ -647,19 +710,33 @@ class SQL:
 		orderby	-- Produced by chaining Query.Order* functions.
 		"""
 		table_name = data_class.__tablename__
+		cmd = SQL.MakeSelectCommand(table_name, args[0], orderby)
+		
+		# See if value is already in cache
+		hash = 0
+		if self.use_cache:
+			hash = SQL.CommandHash(cmd, args[1])
+			if hash in self.cache.keys():
+				return self.cache[hash]
+		
 		cursor = self.connection.cursor()
-		SQL.ExecuteSelect(cursor, table_name, args, orderby)
+		cursor.execute(cmd, args[1])
 		results = cursor.fetchall()
 		search_list = []
 		for result in results:
 			item = self.ProcessRow(data_class, result)
 			search_list.append(item)
 		cursor.close()
+
+		if self.use_cache:
+			self.cache[hash] = search_list
+
 		return search_list
 
 	def Count(self, data_class:type, args:tuple) -> int:
 		"""
 		Returns the number of rows in the table that satisfy the query.
+		Result not cached.
 
 		Arguments:
 
@@ -683,13 +760,27 @@ class SQL:
 		"""
 		table_name = data_class.__tablename__
 		cmd = "select * from {table_name}"
+
+		# See if value is already in cache
+		hash = 0
+		if self.use_cache:
+			hash = SQL.CommandHash(cmd, ())
+			if hash in self.cache.keys():
+				return self.cache[hash]
+
 		cursor = self.connection.cursor()
+		cursor.execute(cmd)
 		results = cursor.fetchall()
 		search_list = []
 		for result in results:
 			item = self.ProcessRow(data_class, result)
 			search_list.append(item)
 		cursor.close()
+
+		if self.use_cache:
+			self.cache[hash] = search_list
+
+		return search_list
 
 	def SelectOne(self, data_class:type, args:tuple) -> list:
 		"""
@@ -700,13 +791,26 @@ class SQL:
 		args 	-- Produced by chaining Query functions.
 		"""
 		table_name = data_class.__tablename__
+		cmd = SQL.MakeSelectCommand(table_name, args[0])
+		
+		# See if value is already in cache
+		hash = 0
+		if self.use_cache:
+			hash = SQL.CommandHash(cmd, args[1])
+			if hash in self.cache.keys():
+				return self.cache[hash]
+		
 		cursor = self.connection.cursor()
-		SQL.ExecuteSelect(cursor, table_name, args, "")
+		cursor.execute(cmd, args[1])
 		result = cursor.fetchone()
 		if result == None:
 			return None
 		item = self.ProcessRow(data_class, result)
 		cursor.close()
+
+		if self.use_cache:
+			self.cache[hash] = item
+
 		return item
 	
 	def SelectAtIndex(self, data_class:type, index:int) -> object:
@@ -718,19 +822,31 @@ class SQL:
 		index 	-- index of row in table (dbid, or primary key)
 		"""
 		table_name = data_class.__tablename__
-		cursor = self.connection.cursor()
 		cmd = f"select * from {table_name} where dbid = ?"
-		cursor.execute(cmd, (index,) )
+		args = (index,)
+		# See if value is already in cache
+		hash = 0
+		if self.use_cache:
+			hash = SQL.CommandHash(cmd, args)
+			if hash in self.cache.keys():
+				return self.cache[hash]
+
+		cursor = self.connection.cursor()
+		cursor.execute(cmd, args )
 		result = cursor.fetchone()
 		if result == None:
 			return None
 		item = self.ProcessRow(data_class, result)
 		cursor.close()
+
+		if self.use_cache:
+			self.cache[hash] = item
+
 		return item
 	
 	def RandomEntries(self, data_class:type, num=1) -> list:
 		"""
-		Selects rows at random from the DB.
+		Selects rows at random from the DB. Result not cached.
 
 		Arguments:
 
