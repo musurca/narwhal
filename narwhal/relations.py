@@ -17,7 +17,7 @@ class Reference(Generic[T]):
 			if self.cached != None:
 				# Add it if it hasn't already
 				SQL.Get().Add(self.cached, commit=False)
-			self.ref_id = self.cached.dbid
+				self.ref_id = self.cached.dbid
 		return self.ref_id
 
 	def __sql_converter__(self, i):

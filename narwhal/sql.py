@@ -323,7 +323,8 @@ class SQL:
 			# initialize table name
 			if "__tablename__" not in data_class.__dict__.keys():
 				data_class.__tablename__ = f"{dc_name.lower()}_table"
-
+				
+		for data_class in data_classes:
 			# initialize column names
 			if not hasattr(data_class, "__sql_columns__"):
 				data_class.__sql_columns__ = []
