@@ -543,7 +543,7 @@ class SQL:
 					if ld[1] == dc_name:
 						for val in vals.values():
 							my_list = val.__dict__[ ld[0] ]
-							my_list.__erase__(item)
+							my_list.__erase_item__(item)
 		
 		if commit:
 			self.connection.commit()

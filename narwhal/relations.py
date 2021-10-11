@@ -160,7 +160,29 @@ class List(Generic[T]):
 		item = self.items[index]
 		self.remove(item)
 
-	def __erase__(self, item):
+	def __remove_item__(self, item):
+		id_key = self.id_key
+		order_key = self.order_key
+
+		internal_index = self.items.index(item)
+
+		# Knock the item off the list
+		prev_dict = item.__dict__
+		prev_dict[id_key] = NULL_INT
+		cur_order = prev_dict[order_key]
+		prev_dict[order_key] = NULL_INT
+
+		# Move all items above it down one
+		last_index = len(self.items) - 1
+		for i in range( internal_index, last_index ):
+			move_item = self.items[i+1]
+			move_item[order_key] = cur_order
+			self.items[i] = move_item
+			cur_order += 1
+		
+		self.items.pop(last_index)
+
+	def __erase_item__(self, item):
 		"""
 		Remove an item from a List when it's already been deleted. 
 		Ensures that the item is not added to the DB again.
@@ -168,26 +190,7 @@ class List(Generic[T]):
 		assert(type(item) == self.child_dc)
 		if self.__is_loaded__():
 			if item in self.items:
-				id_key = self.id_key
-				order_key = self.order_key
-
-				list_index = self.items.index(item)
-
-				# Knock the item off the list
-				prev_dict = item.__dict__
-				prev_dict[id_key] = NULL_INT
-				cur_order = prev_dict[order_key]
-				prev_dict[order_key] = NULL_INT
-
-				# Move all items above it down one
-				last_index = len(self.items) - 1
-				for i in range( list_index, last_index ):
-					move_item = self.items[i+1]
-					move_item[order_key] = cur_order
-					self.items[i] = move_item
-					cur_order += 1
-				
-				self.items.pop(last_index)
+				self.__remove_item__(item)
 
 				# remove it from former items to update
 				if item in self.former_items:
@@ -196,41 +199,24 @@ class List(Generic[T]):
 	def remove(self, item):
 		assert(type(item) == self.child_dc)
 		self.__check_loaded__()
-		id_key = self.id_key
-		order_key = self.order_key
+		if item in self.items:
+			self.__remove_item__(item)
 
-		# Knock the item off the list
-		list_index = self.items.index(item)
-
-		prev_dict = item.__dict__
-		prev_dict[id_key] = NULL_INT
-		cur_order = prev_dict[order_key]
-		prev_dict[order_key] = NULL_INT
-	
-		# Move all items above it down one.
-		# Also resets the order keys
-		last_index = len(self.items) - 1
-		for i in range( list_index, last_index ):
-			move_item = self.items[i+1]
-			move_item[order_key] = cur_order
-			self.items[i] = move_item
-			cur_order += 1
-
-		self.items.pop(last_index)
-
-		# Add it to the list of former items to update later
-		if item not in self.former_items:
-			self.former_items.append(item)
+			# Add it to the list of former items to update later
+			if item not in self.former_items:
+				self.former_items.append(item)
 		
 	def __setitem__(self, index, value):
 		assert(type(value) == self.child_dc)
 		self.__check_loaded__()
 
+		order_key = self.order_key
+
 		# Remove any old item that was stored here
 		assert(index < len(self.items))
 		old_item = self.items[index]
 		old_dict = value.__dict__
-		order = old_dict[self.order_key]
+		order = old_dict[order_key]
 		self.remove(old_item)
 
 		# Set the new value
@@ -239,7 +225,7 @@ class List(Generic[T]):
 		if hasattr(self.parent, "dbid"):
 			new_dict[self.id_key] = self.parent.dbid
 		# Set order number -- not necessarily index
-		new_dict[self.order_key] = order
+		new_dict[order_key] = order
 		self.items[index] = value
 
 	def __contains__(self, value:object) -> bool:
@@ -249,7 +235,6 @@ class List(Generic[T]):
 
 	def __getitem__(self, index) -> object:
 		self.__check_loaded__()
-		
 		assert( index < len(self.items) )
 		return self.items[index]
 
