@@ -3,6 +3,7 @@ import sqlite3
 from datetime import datetime, date
 from typing import get_args, get_origin
 
+NULL_INT = 0
 
 class Query:
 	def Equals(var_name, val):
@@ -106,7 +107,7 @@ class SQL:
 
 	TYPE_DEFAULT = {
 		"text" 		: "",
-		"integer"	: 0,
+		"integer"	: NULL_INT,
 		"real"		: 0.0,
 		"date"		: date(1000, 1, 1),
 		"timestamp"	: datetime(1000, 1, 1)
@@ -432,7 +433,7 @@ class SQL:
 		valid_columns = idict.keys()
 
 		if "dbid" in valid_columns:
-			if item.dbid != 0:
+			if item.dbid != NULL_INT:
 				self.Update(item, commit=commit)
 				return
 		

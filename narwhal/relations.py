@@ -1,10 +1,8 @@
 from typing import Generic, TypeVar, get_origin
 
-from .sql import SQL, Query
+from .sql import SQL, Query, NULL_INT
 
 T = TypeVar("T")
-
-NULL_INT = 0
 
 class Reference(Generic[T]):
 	__sql_type__ = "integer"
@@ -213,7 +211,7 @@ class List(Generic[T]):
 			move_item[order_key] = cur_order
 			self.items[i] = move_item
 			cur_order += 1
-			
+
 		self.items.pop(last_index)
 
 		# Add it to the list of former items to update later
