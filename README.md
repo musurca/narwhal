@@ -1,6 +1,6 @@
 # Narwhal
 
-A sqlite3 interface and ORM for Python, for enterprise JFA (just-fucking-around) programming.
+A Python sqlite3 interface & ORM, for enterprise JFA (just-fucking-around) programming.
 
 The Narwhal ORM is designed to perform object-relational mapping with a minimum amount of explicit instruction, allowing you to focus on more pressing JFA tasks.
 
@@ -23,7 +23,9 @@ class Vessel(Mutable):
 
 sql = SQL("test.db")
 sql.RegisterTables((Vessel,))
-sql.CreateTables()
+
+# Do this once when you first create the DB
+sql.CreateTables() 
 ```
 
 To add a new row to the table, simply instantiate the class and call the `Serialize` method.
@@ -39,11 +41,10 @@ v_list = []
 for i in range( 1000 ):
 	v = Vessel()
 	v_list.append(v)
-
 SQL.Get().AddList(v_list)
 ```
 
-To remove an item from the table,  use the `Delete` method.
+To remove an item from the table, use the `Delete` method.
 
 ```python
 v.Delete()
@@ -168,4 +169,43 @@ SQL.RegisterTypeConversion(
 		converter 	= lambda p : Position.FromTuple( tuple(map(float, p.split(b";"))) ),
 		default 	= Position()
 	)
+```
+
+## Advanced Use
+
+### Caching
+
+You can cache the results of queries with the `use_cache` argument when creating the SQL connection.
+
+```python
+sql = SQL("test.db", use_cache=True)
+
+# Makes a query, and stores the result in the cache
+v = Vessel.Select(
+	Query.And(
+		Query.Equals("name", "Constitution"),
+		Query.GreaterThan("year_built", 1700)
+	)
+)
+
+# The cached result from before will be returned
+# instead of hitting the database
+v = Vessel.Select(
+	Query.And(
+		Query.GreaterThan("year_built", 1700),
+		Query.Equals("name", "Constitution")
+	)
+)
+```
+
+### Shared Memory
+
+You can store all results from the database in a shared memory space, ensuring that you'll never have more than one copy of a row in local memory. If you store results from previous queries, those results will automatically be updated as new matching queries come in.
+
+This will also slowly build up a local copy of the database as you continue to query it.
+
+(NOTE: shared memory is automatically activated if you're using caching.)
+
+```python
+sql = SQL("test.db", use_sharedmemory=True)
 ```
