@@ -77,6 +77,9 @@ def test():
 	# Delete the crew member
 	c.Delete()
 
+	v = Vessel.SelectOne(
+		Query.Equals("name", "Bellona")
+	)
 	# Delete the vessel
 	v.Delete()
 

@@ -106,7 +106,7 @@ class SQL:
 
 	TYPE_DEFAULT = {
 		"text" 		: "",
-		"integer"	: -1,
+		"integer"	: 0,
 		"real"		: 0.0,
 		"date"		: date(1000, 1, 1),
 		"timestamp"	: datetime(1000, 1, 1)
@@ -170,6 +170,21 @@ class SQL:
 
 		parent_class.__list_defs__.append((varname, child_class.__name__))
 
+		# TODO: add to foreign keys of child
+		# Can't do this because being a member of a
+		# List shouldn't be a constraint. If we wanted to
+		# make use of foreign key constraints, we'd need to
+		# probably create a "null" row at the top of every
+		# table (dbid == 0)
+		"""
+		if not hasattr(child_class, "__foreign_keys__"):
+			child_class.__foreign_keys__ = []
+		foreign_keys = child_class.__foreign_keys__
+		foreign_keys.append(
+			( id, parent_class.__tablename__ )
+		)
+		"""
+
 	def Get():
 		return SQL.DEFAULT_DB
 
@@ -184,6 +199,9 @@ class SQL:
 		self.use_sharedmemory = use_sharedmemory or use_cache
 		self.sharedmemory = {}
 		SQL.DEFAULT_DB = self
+
+		# activate foreign keys
+		self.connection.execute("PRAGMA foreign_keys = ON")
 
 	def CommandHash(cmd:str, args:tuple) -> int:
 		"""
@@ -301,17 +319,20 @@ class SQL:
 			if self.use_sharedmemory:
 				self.sharedmemory[dc_name] = {}
 
+			# initialize table name
+			if "__tablename__" not in data_class.__dict__.keys():
+				data_class.__tablename__ = f"{dc_name.lower()}_table"
+
 			# initialize column names
 			if not hasattr(data_class, "__sql_columns__"):
 				data_class.__sql_columns__ = []
 			data_class.__sql_columns__ += SQL.MakeColumns(data_class)
 
-			# initialize table name
-			if "__tablename__" not in data_class.__dict__.keys():
-				data_class.__tablename__ = f"{dc_name.lower()}_table"
-			
 			# find foreign key relationships, if any
-			foreign_keys = []
+			if hasattr(data_class, "__foreign_keys__"):
+				foreign_keys = data_class.__foreign_keys__
+			else:
+				foreign_keys = []
 			for item_name, item_type in data_class.__annotations__.items():
 				origin = get_origin(item_type)
 				if hasattr(origin, "__name__"):
@@ -357,7 +378,7 @@ class SQL:
 		# establish foreign keys
 		foreign_keys = data_class.__foreign_keys__
 		for foreign_key in foreign_keys:
-			cmd += f", foreign key({foreign_key[0]}) references {foreign_key[1]}(dbid)"
+			cmd += f", foreign key({foreign_key[0]}) references {foreign_key[1]}(dbid) on delete set null"
 		cmd += ")"
 
 		# execute it
@@ -411,7 +432,7 @@ class SQL:
 		valid_columns = idict.keys()
 
 		if "dbid" in valid_columns:
-			if item.dbid != -1:
+			if item.dbid != 0:
 				self.Update(item, commit=commit)
 				return
 		
@@ -473,6 +494,12 @@ class SQL:
 		if data_class.__immutable__ and not force_remove:
 			print(f"WARNING: Can't delete immutable type {dc_name}!")
 			return
+
+		# First unlink any items in lists connected to this
+		for list in item.__get_lists__():
+			list.__delete_from_db__()
+
+		# Now delete it from the table
 		table_name = data_class.__tablename__
 		cmd = f"delete from {table_name} where dbid = ?"
 		self.connection.execute( cmd, (item.dbid,) )

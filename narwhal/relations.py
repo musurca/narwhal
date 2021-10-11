@@ -4,6 +4,8 @@ from .sql import SQL, Query
 
 T = TypeVar("T")
 
+NULL_INT = 0
+
 class Reference(Generic[T]):
 	__sql_type__ = "integer"
 
@@ -13,7 +15,7 @@ class Reference(Generic[T]):
 	initialized	: bool
 
 	def __sql_adapter__(self):
-		if self.ref_id == -1:
+		if self.ref_id == NULL_INT:
 			if self.cached != None:
 				# Add it if it hasn't already
 				SQL.Get().Add(self.cached, commit=False)
@@ -27,7 +29,7 @@ class Reference(Generic[T]):
 		self.child_dc = child_dc
 
 	def __init__(self):
-		self.ref_id = -1
+		self.ref_id = NULL_INT
 		self.cached = None
 		self.initialized = False
 
@@ -36,11 +38,11 @@ class Reference(Generic[T]):
 			assert(type(obj) == self.child_dc)
 			self.ref_id = obj.dbid
 		else:
-			self.ref_id = -1
+			self.ref_id = NULL_INT
 		self.cached = obj
 
 	def __get__(self):
-		if self.ref_id != -1:
+		if self.ref_id != NULL_INT:
 			if self.child_dc.__immutable__ and self.cached != None:
 				return self.cached
 			#dc = get_args(self.__orig_class__)[0]
@@ -66,7 +68,7 @@ class List(Generic[T]):
 	def ReverseLookup(cls, child:object, parent_dc:type, var_name:str):
 		id = SQL.MakeListID( SQL.ListIdentifier(parent_dc, var_name) )
 		parent_dbid = child.__dict__[id]
-		if parent_dbid != -1:
+		if parent_dbid != NULL_INT:
 			return SQL.Get().SelectOne(
 				parent_dc,
 				Query.Equals("dbid", parent_dbid)
@@ -87,7 +89,7 @@ class List(Generic[T]):
 		# safety check to make sure we have a valid id
 		# and a valid parent
 		assert(self.identifier != "")
-		assert(self.parent.dbid != -1)
+		assert(self.parent.dbid != NULL_INT)
 
 	def __is_loaded__(self):
 		if self.from_db:
@@ -99,11 +101,12 @@ class List(Generic[T]):
 			if not self.initialized:
 				self.__validate_parent__()
 				#dc = get_args(self.__orig_class__)[0]
-				self.items = SQL.Get().Select(
+				sql = SQL.Get()
+				self.items = sql.Select(
 					self.child_dc,
 					Query.Equals(self.id_key, self.parent.dbid),
 					Query.OrderAscending(self.order_key)
-				)
+				)		
 				self.initialized = True
 
 	def __len__(self):
@@ -172,9 +175,9 @@ class List(Generic[T]):
 
 				# Knock the item off the list
 				prev_dict = item.__dict__
-				prev_dict[id_key] = -1
+				prev_dict[id_key] = NULL_INT
 				cur_order = prev_dict[order_key]
-				prev_dict[order_key] = -1
+				prev_dict[order_key] = NULL_INT
 
 				# Move all items above it down one
 				last_index = len(self.items) - 1
@@ -195,17 +198,22 @@ class List(Generic[T]):
 		order_key = self.order_key
 
 		# Knock the item off the list
-		prev_dict = item.__dict__
-		prev_dict[id_key] = -1
-		cur_order = prev_dict[order_key]
-		prev_dict[order_key] = -1
+		list_index = self.items.index(item)
 
-		# Move all items above it down one
+		prev_dict = item.__dict__
+		prev_dict[id_key] = NULL_INT
+		cur_order = prev_dict[order_key]
+		prev_dict[order_key] = NULL_INT
+	
+		# Move all items above it down one.
+		# Also resets the order keys
 		last_index = len(self.items) - 1
-		for i in range( cur_order, last_index ):
+		for i in range( list_index, last_index ):
 			move_item = self.items[i+1]
-			move_item[order_key] = i
+			move_item[order_key] = cur_order
 			self.items[i] = move_item
+			cur_order += 1
+			
 		self.items.pop(last_index)
 
 		# Add it to the list of former items to update later
@@ -219,6 +227,8 @@ class List(Generic[T]):
 		# Remove any old item that was stored here
 		assert(index < len(self.items))
 		old_item = self.items[index]
+		old_dict = value.__dict__
+		order = old_dict[self.order_key]
 		self.remove(old_item)
 
 		# Set the new value
@@ -226,7 +236,8 @@ class List(Generic[T]):
 		new_dict = value.__dict__
 		if hasattr(self.parent, "dbid"):
 			new_dict[self.id_key] = self.parent.dbid
-		new_dict[self.order_key] = index
+		# Set order number -- not necessarily index
+		new_dict[self.order_key] = order
 		self.items[index] = value
 
 	def __contains__(self, value:object) -> bool:
@@ -244,11 +255,22 @@ class List(Generic[T]):
 		assert(type(item) == self.child_dc)
 		self.__check_loaded__()
 
+		order_key = self.order_key
+
 		assert(item not in self.items)
 		new_dict = item.__dict__
 		if hasattr(self.parent, "dbid"):
 			new_dict[self.id_key] = self.parent.dbid
-		new_dict[self.order_key] = len(self.items)
+		
+		# Set the order number 
+		if len(self.items) == 0:
+			new_dict[order_key] = 0
+		else:
+			# Set order from last item
+			last_dict = self.items[len(self.items)-1].__dict__
+			last_order = last_dict[order_key]
+			new_dict[order_key] = last_order + 1
+
 		self.items.append(item)
 
 	def __iter__(self):
@@ -269,8 +291,8 @@ class List(Generic[T]):
 			
 			# Knock the item off the list
 			prev_dict = item.__dict__
-			prev_dict[id_key] = -1
-			prev_dict[order_key] = -1
+			prev_dict[id_key] = NULL_INT
+			prev_dict[order_key] = NULL_INT
 			if item not in obj_list:
 				self.former_items.append(item)
 			self.items.pop(i)
@@ -320,3 +342,25 @@ class List(Generic[T]):
 			#sql.UpdateList(self.items, commit=False)
 
 			self.from_db = True
+	
+	def __delete_from_db__(self):
+		self.__check_loaded__()
+		id_key = self.id_key
+		sql = SQL.Get()
+
+		# Update any items that were removed from this list
+		for item in self.former_items:
+			sql.Update(item, commit=False)
+		#sql.UpdateList(self.former_items, commit=False)
+		self.former_items = []
+		
+		# Unlink all items that are now in the list
+		for item in self.items:
+			item_dict = item.__dict__
+			item_dict[self.id_key] = NULL_INT
+			item_dict[self.order_key] = NULL_INT
+			sql.Update(item, commit=False)
+		#sql.UpdateList(self.items, commit=False)
+		self.items = []
+
+		self.from_db = True
