@@ -171,6 +171,8 @@ class List(Generic[T]):
 				id_key = self.id_key
 				order_key = self.order_key
 
+				list_index = self.items.index(item)
+
 				# Knock the item off the list
 				prev_dict = item.__dict__
 				prev_dict[id_key] = NULL_INT
@@ -179,10 +181,12 @@ class List(Generic[T]):
 
 				# Move all items above it down one
 				last_index = len(self.items) - 1
-				for i in range( cur_order, last_index ):
+				for i in range( list_index, last_index ):
 					move_item = self.items[i+1]
-					move_item[order_key] = i
+					move_item[order_key] = cur_order
 					self.items[i] = move_item
+					cur_order += 1
+				
 				self.items.pop(last_index)
 
 				# remove it from former items to update
