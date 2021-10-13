@@ -111,15 +111,20 @@ class List(Generic[T]):
 		self.__check_loaded__()	
 		return len(self.items)
 
+	"""
+	# Disabled as these are not correctly implemented and need to be resolved
+	# re: shared memory if copies are made
 	def __add__(self, x):
 		self.__check_loaded__()
 		t = type(x)
 		if t == list or t == tuple or get_origin(t) == List:
 			for item in x:
-				assert(type(item) == self.child_dc)
+				if type(item) != self.child_dc:
+					return NotImplemented
 				self.append(item)
 		else:
-			assert(type(x) == self.child_dc)
+			if t != self.child_dc:
+				return NotImplemented
 			self.append(x)
 	
 	def __sub__(self, x):
@@ -127,13 +132,16 @@ class List(Generic[T]):
 		t = type(x)
 		if t == list or t == tuple or get_origin(t) == List:
 			for item in x:
-				assert(type(item) == self.child_dc)
+				if type(item) != self.child_dc:
+					return NotImplemented
 				if item in self.items:
 					self.remove(item)
 		else:
-			assert(type(x) == self.child_dc)
+			if t != self.child_dc:
+				return NotImplemented
 			if x in self.items:
 				self.remove(x)
+	"""
 
 	def set_parent_child(self, parent:object, child_class:type, varname:str):
 		# determine list id
