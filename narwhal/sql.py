@@ -243,7 +243,11 @@ class SQL:
 		Returns the size of the cache, which is just
 		the size of the shared memory.
 		"""
-		return self.SharedMemorySize()
+		sz = 0
+		for key, item in self.cache.items():
+			sz += sys.getsizeof(key)
+			sz += sys.getsizeof(item)
+		return sz
 
 	def SharedMemorySize(self):
 		"""
@@ -256,6 +260,21 @@ class SQL:
 				sz += sys.getsizeof(k)
 				sz += sys.getsizeof(i)
 		return sz
+
+	def ClearCache(self):
+		self.cache = {}
+
+	def __mark_deleted__(self, obj:object):
+		"""	If an DBObject is being deleted by the
+			Python garbage collector, remove it from
+			shared memory if it exists there.
+		"""
+		if self.use_sharedmemory:
+			type_name = type(obj).__name__
+			if type_name in self.sharedmemory.keys():
+				sharedmem_type = self.sharedmemory[type_name]
+				if obj.dbid in sharedmem_type.keys():
+					sharedmem_type.pop(obj.dbid)
 
 	def MakeColumns(data_class: type):
 		"""

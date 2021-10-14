@@ -86,6 +86,12 @@ class DBObject:
 				idict =  object.__getattribute__(self, "__dict__")
 				idict[name] = value
 
+	def __del__(self):
+		""" Try to free the object's allocation
+			in shared memory, if it exists there.
+		"""
+		SQL.Get().__mark_deleted__(self)
+
 	def Serialize(self, force_update=False):
 		sql = SQL.Get()
 		idict = object.__getattribute__(self, "__dict__")
