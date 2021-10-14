@@ -1,3 +1,6 @@
+#!python
+#cython: language_level=3
+
 """	Calculates an order-independent hash.
 
 	Any collection of identical characters will return 
