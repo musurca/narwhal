@@ -5,7 +5,7 @@
 	they're arranged.
 """
 
-def order_ind_hash(cmd_str:str):
+def order_ind_hash(str cmd_str):
 	cdef unsigned long hash, k
 	cdef int i
 	cdef int str_len = len(cmd_str)
