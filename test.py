@@ -105,7 +105,6 @@ if __name__ == '__main__':
 			Vessel,
 			HistoryString
 		])
-		sql.CreateTables()
 
 		test()
 

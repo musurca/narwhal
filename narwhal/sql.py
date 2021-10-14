@@ -1,4 +1,5 @@
 import sys
+from os import path
 import re
 import sqlite3
 from datetime import datetime, date
@@ -104,6 +105,7 @@ class SQL:
 	cache: dict
 	use_sharedmemory: bool
 	sharedmemory: dict
+	will_init_tables: bool
 
 	TYPE_TABLE = {
 		"str" 				: "text",
@@ -199,6 +201,10 @@ class SQL:
 		return SQL.DEFAULT_DB
 
 	def __init__(self, db_path:str, use_cache=False, use_sharedmemory=False):
+		self.will_init_tables = False
+		if db_path == ":memory:" or not path.exists(db_path):
+			self.will_init_tables = True
+		
 		self.connection = sqlite3.connect(
 			db_path,
 			detect_types=sqlite3.PARSE_DECLTYPES
@@ -371,8 +377,10 @@ class SQL:
 			data_class.__column_values__ = SQL.ColumnValuesInString(
 				data_class=data_class
 			)
+		
+		if self.will_init_tables:
+			self.CreateTables()
 			
-	# TODO: don't create the tables if not needed
 	def CreateTables(self):
 		for data_class in self.tables:
 			if len(data_class.__sql_columns__) > 0:

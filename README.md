@@ -8,7 +8,7 @@ Narwhal supports foreign key relationships between tables, including both one-to
 
 ## Overview
 
-The following simple class is a perfectly valid instruction for the Narwhal ORM to produce a corresponding table and columns.
+The following simple class is a perfectly valid instruction for the Narwhal ORM to produce a corresponding table and columns. If the database does not already exist, Narwhal will create all registered tables.
 
 ```python
 from narwhal.sql import SQL
@@ -23,9 +23,6 @@ class Vessel(Mutable):
 
 sql = SQL("test.db")
 sql.RegisterTables((Vessel,))
-
-# Do this once when you first create the DB
-sql.CreateTables() 
 ```
 
 To add a new row to the table, simply instantiate the class and call the `Serialize` method.
