@@ -4,6 +4,9 @@ import sqlite3
 from datetime import datetime, date
 from typing import get_args, get_origin
 
+import pyximport; pyximport.install()
+from .hash import order_ind_hash
+
 NULL_INT = 0
 
 class Query:
@@ -233,19 +236,7 @@ class SQL:
 
 		# substitute arguments into list
 		cmd_str = SQL.HASH_RE.sub(next_arg, cmd)
-
-		hash = 0
-		for i in range( len(cmd_str) ):
-			k = ord(cmd_str[i])
-			k = k ^ (k >> 17)
-			k *= 830770091
-			k = k ^ (k >> 11)
-			k *= -1404298415
-			k = k ^ (k >> 15)
-			k *= 830770091
-			k = k ^ (k >> 14)
-			hash += k
-		return hash
+		return order_ind_hash(cmd_str)
 
 	def CacheSize(self):
 		"""
