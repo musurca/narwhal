@@ -1,4 +1,5 @@
 import sys
+import re
 import sqlite3
 from datetime import datetime, date
 from typing import get_args, get_origin
@@ -61,17 +62,20 @@ class Query:
 		)
 
 	def ChainExprs(exprs, chain_str=", "):
-		query_str = ""
+		query_str = []
 		val_tup = ()
 		expr_range = len(exprs) - 1
 		for i in range(expr_range):
 			expr = exprs[i]
-			query_str += f"({expr[0]}){chain_str}"
+			query_str.append(f"({expr[0]}){chain_str}")
 			val_tup += expr[1]
 		expr = exprs[expr_range]
-		query_str += f"({expr[0]})"
+		query_str.append(f"({expr[0]})")
 		val_tup += expr[1]
-		return ( query_str, val_tup )
+		return ( 
+			"".join(query_str), 
+			val_tup 
+		)
 
 	def And(*exprs):
 		return Query.ChainExprs(exprs, chain_str=" and ")
@@ -90,6 +94,8 @@ class Query:
 class SQL:
 	DEFAULT_DB = None
 	TABLES = []
+
+	HASH_RE = re.compile("\?")
 
 	use_cache: bool
 	cache: dict
@@ -212,19 +218,21 @@ class SQL:
 		characters will return the same hash, regardless of the
 		order in which they're arranged.
 		"""
-		cmd_list = cmd.split("?")
-		cmd_str = ""
+		arg_list = list(args)
+
+		def next_arg(m):
+			arg = arg_list.pop(0)
+			arg_typename = type(arg).__name__
+			if arg_typename in SQL.TYPE_ADAPTERS:
+				arg = SQL.TYPE_ADAPTERS[arg_typename](arg)
+			elif hasattr(arg, "__sql_adapter__"):
+				arg = arg.__sql_adapter__()
+			if type(arg) == str:
+				return f"\"{arg}\""
+			return str(arg)
+
 		# substitute arguments into list
-		for i in range( len(cmd_list) ):
-			cmd_str += cmd_list[i]
-			if i < len(args):
-				arg = args[i]
-				arg_typename = type(arg).__name__
-				if arg_typename in SQL.TYPE_ADAPTERS:
-					arg = SQL.TYPE_ADAPTERS[arg_typename](arg)
-				elif hasattr(arg, "__sql_adapter__"):
-					arg = arg.__sql_adapter__()
-				cmd_str += str(arg)
+		cmd_str = SQL.HASH_RE.sub(next_arg, cmd)
 
 		hash = 0
 		for i in range( len(cmd_str) ):
@@ -296,16 +304,19 @@ class SQL:
 	def ColumnValuesInString(data_class:type) -> str:
 		sql_columns = data_class.__sql_columns__
 
-		column_cmd = "("
-		values_cmd = "("
+		column_cmd = ["("]
+		values_cmd = ["("]
 		last_column_index = len(sql_columns) - 1
 		for i in range(last_column_index):
 			column_name = sql_columns[i][0]
-			column_cmd += f"{column_name},"
-			values_cmd += "?,"
-		column_cmd += f"{sql_columns[last_column_index][0]})"
-		values_cmd += "?)"
-		return (column_cmd, values_cmd)
+			column_cmd.append(f"{column_name},")
+			values_cmd.append("?,")
+		column_cmd.append(f"{sql_columns[last_column_index][0]})")
+		values_cmd.append("?)")
+		return (
+			"".join(column_cmd), 
+			"".join(values_cmd)
+		)
 
 	def RegisterTables(self, data_classes:list):
 		"""
@@ -369,19 +380,29 @@ class SQL:
 		# tuples of ( column_name, column_type )
 		column_name = lambda c : c[0]
 		column_type = lambda c : c[1]
-		cmd = f"create table {table_name} ( dbid integer primary key autoincrement, "
+		cmd_terms = [
+			f"create table {table_name} ( dbid integer primary key autoincrement, "
+		]
 		col_range = len(sql_columns) - 1
 		for i in range( col_range ):
 			column = sql_columns[i]
-			cmd = cmd + f"{column_name(column)} {column_type(column)}, "
+			cmd_terms.append(
+				f"{column_name(column)} {column_type(column)}, "
+			)
 		column = sql_columns[col_range]
-		cmd = cmd + f"{column_name(column)} {column_type(column)}"
+		cmd_terms.append(
+			f"{column_name(column)} {column_type(column)}"
+		)
 
 		# establish foreign keys
 		foreign_keys = data_class.__foreign_keys__
 		for foreign_key in foreign_keys:
-			cmd += f", foreign key({foreign_key[0]}) references {foreign_key[1]}(dbid) on delete set null"
-		cmd += ")"
+			cmd_terms.append(
+				f", foreign key({foreign_key[0]}) references {foreign_key[1]}(dbid) on delete set null"
+			)
+		cmd_terms.append(")")
+		
+		cmd = "".join(cmd_terms)
 
 		# execute it
 		self.connection.execute(cmd)
@@ -575,8 +596,6 @@ class SQL:
 			column_name = lambda c : c[0]
 			column_type = lambda c : c[1]
 			
-			cmd = f"update {table_name} set "
-			
 			def add_to_column_list(column):
 				name = column_name(column)
 				if name in valid_columns:
@@ -589,15 +608,17 @@ class SQL:
 						SQL.TYPE_DEFAULT[ column_type(column) ]
 					)
 
+			cmd_terms = [f"update {table_name} set "]
 			col_range = len(sql_columns) - 1
 			for i in range(col_range ):
 				column = sql_columns[i]
 				add_to_column_list(column)
-				cmd = cmd + f"{column_name(column)} = ?, "
+				cmd_terms.append(f"{column_name(column)} = ?, ")
 			column = sql_columns[col_range]
 			add_to_column_list(column)
-			cmd = cmd + f"{column_name(column)} = ? where dbid = ?"
+			cmd_terms.append(f"{column_name(column)} = ? where dbid = ?")
 			update_list.append( dbid )
+			cmd = "".join(cmd_terms)
 
 			# update the db
 			self.connection.execute(cmd, tuple(update_list) )
@@ -638,14 +659,19 @@ class SQL:
 		column_type = lambda c : c[1]
 
 		# Build SQL command from first item
-		cmd = f"update {table_name} set "
+		cmd_terms = [f"update {table_name} set "]
 		item = item_list[0]
 		col_range = len(sql_columns) - 1
 		for i in range(col_range ):
 			column = sql_columns[i]
-			cmd = cmd + f"{column_name(column)} = ?, "
+			cmd_terms.append(
+				f"{column_name(column)} = ?, "
+			)
 		column = sql_columns[col_range]
-		cmd = cmd + f"{column_name(column)} = ? where dbid = ?"
+		cmd_terms.append(
+			f"{column_name(column)} = ? where dbid = ?"
+		)
+		cmd = "".join(cmd_terms)
 
 		# Insert actual values to update
 		for item in item_list:
@@ -761,10 +787,10 @@ class SQL:
 		Creates a SELECT command with WHERE query arguments, and 
 		optional ORDER BY.
 		"""
-		cmd = f"select * from {table_name} where {args}"
+		order_str = ""
 		if orderby != "":
-			cmd = cmd + f" order by {orderby}"
-		return cmd
+			order_str = f" order by {orderby}"
+		return f"select * from {table_name} where {args}{order_str}"
 
 	def Select(self, data_class:type, args:tuple, orderby="") -> list:
 		"""

@@ -111,37 +111,50 @@ class List(Generic[T]):
 		self.__check_loaded__()	
 		return len(self.items)
 
-	"""
-	# Disabled as these are not correctly implemented and need to be resolved
-	# re: shared memory if copies are made
+	def __copy_list__(self, other):
+		self.parent	= other.parent
+		self.child_dc = other.child_dc
+		self.identifier = other.identifier
+		self.initialized = other.initialized
+		self.items = other.items.copy()
+		self.former_items = other.former_items.copy()
+		self.from_db = other.from_db
+
 	def __add__(self, x):
 		self.__check_loaded__()
 		t = type(x)
+		new_list = List[T]()
+		new_list.__copy_list__(self)
 		if t == list or t == tuple or get_origin(t) == List:
 			for item in x:
 				if type(item) != self.child_dc:
 					return NotImplemented
-				self.append(item)
+				new_list.append(item)
 		else:
 			if t != self.child_dc:
 				return NotImplemented
-			self.append(x)
+			new_list.append(x)
+		return new_list
+		
+	__radd__ = __add__
 	
 	def __sub__(self, x):
 		self.__check_loaded__()
 		t = type(x)
+		new_list = List[T]()
+		new_list.__copy_list__(self)
 		if t == list or t == tuple or get_origin(t) == List:
 			for item in x:
 				if type(item) != self.child_dc:
 					return NotImplemented
-				if item in self.items:
-					self.remove(item)
+				if item in new_list.items:
+					new_list.remove(item)
 		else:
 			if t != self.child_dc:
 				return NotImplemented
-			if x in self.items:
-				self.remove(x)
-	"""
+			if x in new_list.items:
+				new_list.remove(x)
+		return new_list
 
 	def set_parent_child(self, parent:object, child_class:type, varname:str):
 		# determine list id

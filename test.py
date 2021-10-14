@@ -98,7 +98,7 @@ if __name__ == '__main__':
 			default 	= FloatArray(32)
 		)
 
-		sql = SQL("test.db", use_cache=False)
+		sql = SQL("test.db", use_cache=True)
 		sql.RegisterTables([
 			Crew,
 			VesselClass,
