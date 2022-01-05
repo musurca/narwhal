@@ -5,22 +5,34 @@ import sqlite3
 from datetime import datetime, date
 from typing import get_args, get_origin
 
-import pyximport; pyximport.install()
+import pyximport
+pyximport.install()
 from .hash import order_ind_hash
 
 NULL_INT = 0
 
+class SQLBaseType:
+	pass
+
 class Query:
+	def PreprocessValue(val):
+		value = val
+		if issubclass(type(val), SQLBaseType):
+			value = val.dbid
+		elif get_origin(val) == "Reference":
+			value = val.ref_id
+		return value
+
 	def Equals(var_name, val):
 		return (
 			f"{var_name} = ?", 
-			( val, )
+			( Query.PreprocessValue(val), )
 		)
 
 	def NotEquals(var_name, val):
 		return (
 			f"{var_name} != ?", 
-			( val, )
+			( Query.PreprocessValue(val), )
 		)
 
 	def LessThan(var_name, val):

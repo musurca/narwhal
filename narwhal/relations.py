@@ -336,6 +336,9 @@ class List(Generic[T]):
 			id_key = self.id_key
 			sql = SQL.Get()
 
+			# TODO: handle updates to immutable items stored in list 
+			# (force_update should be true unless it would change other attributes)
+
 			# Update any items that were removed from this list
 			for item in self.former_items:
 				sql.Update(item, commit=False)

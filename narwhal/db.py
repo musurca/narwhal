@@ -1,9 +1,9 @@
 from typing import get_origin, get_args
 
-from .sql import SQL
+from .sql import SQL, SQLBaseType
 from .relations import Reference, List
 
-class DBObject:
+class DBObject(SQLBaseType):
 	SPECIAL_TYPES 	= [ Reference, List ]
 	INIT_TABLE = {
 		"Reference" 		: lambda t : Reference[t](),
@@ -134,7 +134,7 @@ class DBObject:
 		return SQL.Get().Count(cls, args)
 
 	@classmethod
-	def __len__(cls) -> int:
+	def Size(cls) -> int:
 		return SQL.Get().TableLength(cls)
 
 
